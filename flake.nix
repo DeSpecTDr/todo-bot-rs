@@ -10,15 +10,17 @@
     utils.lib.eachDefaultSystem (system:
       let pkgs = nixpkgs.legacyPackages.${system}; in
       {
-        devShell = with pkgs; mkShell rec {
+        devShell = with pkgs; mkShell {
           # for compilers and etc
           nativeBuildInputs = [
+            sqlx-cli
             pkg-config
           ];
           # for runtime dependencies
           buildInputs = [
             openssl
           ];
+          DATABASE_URL="sqlite:todos.db";
         };
       });
 }
