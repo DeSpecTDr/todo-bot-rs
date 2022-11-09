@@ -1,14 +1,16 @@
 use sqlx::sqlite::SqlitePool;
 
-async fn add_todo(pool: &SqlitePool, description: String) -> anyhow::Result<i64> {
+pub async fn add_todo(pool: &SqlitePool, chat_id: i64, description: String) -> anyhow::Result<i64> {
     let mut conn = pool.acquire().await?;
 
     // Insert the task, then obtain the ID of this row
     let id = sqlx::query!(
         r#"
-INSERT INTO todos ( description )
-VALUES ( ?1 )
+INSERT INTO todos ( chat_id, task_id, description )
+VALUES ( ?1, ?2, ?3 )
         "#,
+        chat_id,
+        1,
         description
     )
     .execute(&mut conn)
@@ -18,7 +20,7 @@ VALUES ( ?1 )
     Ok(id)
 }
 
-async fn complete_todo(pool: &SqlitePool, id: i64) -> anyhow::Result<bool> {
+pub async fn complete_todo(pool: &SqlitePool, id: i64) -> anyhow::Result<bool> {
     let rows_affected = sqlx::query!(
         r#"
 UPDATE todos
@@ -34,20 +36,42 @@ WHERE id = ?1
     Ok(rows_affected > 0)
 }
 
-async fn list_todos(pool: &SqlitePool) -> anyhow::Result<()> {
+pub async fn remove_todo(pool: &SqlitePool, chat_id: i64, task_id: i64) -> anyhow::Result<bool> {
+    let rows_affected = sqlx::query!(
+        r#"
+DELETE FROM todos
+WHERE chat_id = ?1 AND task_id = ?2
+        "#,
+        chat_id,
+        task_id,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(rows_affected > 0)
+}
+
+pub async fn list_todos(pool: &SqlitePool, chat_id: i64) -> anyhow::Result<String> {
     let recs = sqlx::query!(
         r#"
-SELECT id, description, done
+SELECT task_id, description, done
 FROM todos
-ORDER BY id
-        "#
+WHERE chat_id = ?1
+ORDER BY task_id
+        "#,
+        chat_id
     )
     .fetch_all(pool)
     .await?;
 
-    for rec in recs {
-        println!("- [{}] {}: {}", if rec.done { "x" } else { " " }, rec.id, &rec.description,);
-    }
+    // for rec in recs {
+    //     println!("- [{}] {}: {}", if rec.done { "x" } else { " " }, rec.id,
+    // &rec.description,); }
 
-    Ok(())
+    Ok(recs
+        .into_iter()
+        .map(|rec| format!("{}) {}", rec.task_id, rec.description))
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
