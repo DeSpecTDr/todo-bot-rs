@@ -21,7 +21,7 @@
             openssl
           ];
           DATABASE_URL = "sqlite:todos.db";
-          TELOXIDE_TOKEN = "5700014825:AAEesxB09g7EdM-LBPlb36mUidOx1rwr9ZE";
+          TELOXIDE_TOKEN = "5700014825:AAEesxB09g7EdM-LBPlb36mUidOx1rwr9ZE"; # revoked token
         };
       });
 }
