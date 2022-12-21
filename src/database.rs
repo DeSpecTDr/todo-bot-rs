@@ -1,46 +1,54 @@
+use std::fmt::Display;
+
+use anyhow::Result;
+use chrono::NaiveDate;
 use sqlx::sqlite::SqlitePool;
 
-pub async fn add_todo(pool: &SqlitePool, chat_id: i64, description: String) -> anyhow::Result<i64> {
-    let mut conn = pool.acquire().await?;
+pub struct Task {
+    pub date: NaiveDate,
+    pub description: String,
+}
 
-    // Insert the task, then obtain the ID of this row
-    let id = sqlx::query!(
+impl Display for Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.date, self.description)
+    }
+}
+
+pub async fn add_todo(
+    pool: &SqlitePool,
+    chat_id: i64,
+    date: NaiveDate,
+    description: String,
+) -> Result<()> {
+    sqlx::query!(
         r#"
-INSERT INTO todos ( chat_id, task_id, description )
+INSERT INTO todos ( chat_id, date, description )
 VALUES ( ?1, ?2, ?3 )
         "#,
         chat_id,
-        1,
+        date,
         description
     )
-    .execute(&mut conn)
-    .await?
-    .last_insert_rowid();
-
-    Ok(id)
-}
-
-pub async fn complete_todo(pool: &SqlitePool, id: i64) -> anyhow::Result<bool> {
-    let rows_affected = sqlx::query!(
-        r#"
-UPDATE todos
-SET done = TRUE
-WHERE id = ?1
-        "#,
-        id
-    )
     .execute(pool)
-    .await?
-    .rows_affected();
+    .await?;
 
-    Ok(rows_affected > 0)
+    Ok(())
 }
 
-pub async fn remove_todo(pool: &SqlitePool, chat_id: i64, task_id: i64) -> anyhow::Result<bool> {
+pub async fn remove_todo(pool: &SqlitePool, chat_id: i64, task_id: u32) -> Result<bool> {
     let rows_affected = sqlx::query!(
         r#"
 DELETE FROM todos
-WHERE chat_id = ?1 AND task_id = ?2
+WHERE rowid IN (
+    SELECT rowid FROM (
+        SELECT ROW_NUMBER() OVER (ORDER BY date) row, rowid FROM (
+            SELECT rowid, date
+            FROM todos
+            WHERE chat_id = ?1
+        )
+    ) WHERE row = ?2
+)
         "#,
         chat_id,
         task_id,
@@ -52,26 +60,21 @@ WHERE chat_id = ?1 AND task_id = ?2
     Ok(rows_affected > 0)
 }
 
-pub async fn list_todos(pool: &SqlitePool, chat_id: i64) -> anyhow::Result<String> {
-    let recs = sqlx::query!(
+pub async fn list_todos(pool: &SqlitePool, chat_id: i64) -> Result<Vec<Task>> {
+    Ok(sqlx::query_as!(
+        Task,
         r#"
-SELECT task_id, description, done
-FROM todos
-WHERE chat_id = ?1
-ORDER BY task_id
-        "#,
+SELECT
+    date as "date: _",
+    description
+FROM
+    todos
+WHERE
+    chat_id = ?1
+ORDER BY date
+    "#,
         chat_id
     )
     .fetch_all(pool)
-    .await?;
-
-    // for rec in recs {
-    //     println!("- [{}] {}: {}", if rec.done { "x" } else { " " }, rec.id,
-    // &rec.description,); }
-
-    Ok(recs
-        .into_iter()
-        .map(|rec| format!("{}) {}", rec.task_id, rec.description))
-        .collect::<Vec<_>>()
-        .join("\n"))
+    .await?)
 }
