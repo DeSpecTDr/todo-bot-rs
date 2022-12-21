@@ -39,8 +39,8 @@ async fn main() -> Result<()> {
 enum Command {
     #[command(description = "display help.")]
     Help,
-    #[command(description = "add a task. /add <date> <task>", parse_with = "split")]
-    Add { time: Time, description: String },
+    #[command(description = "add a task. /add <date> <task>")]
+    Add(String),
     #[command(description = "complete a task. /done <id>")]
     Done(u32),
     #[command(description = "list tasks.")]
@@ -52,7 +52,9 @@ async fn command_handler(db: SqlitePool, bot: Bot, msg: Message, cmd: Command) -
         Command::Help => {
             bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?;
         }
-        Command::Add { time, description } => {
+        Command::Add(input) => {
+            let (time, description) = input.split_once(' ').context("Wrong split")?;
+            let time: Time = time.parse()?;
             database::add_todo(&db, msg.chat.id.0, time.0, description).await?;
             bot.send_message(msg.chat.id, "Task is added.").await?;
         }

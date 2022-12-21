@@ -19,7 +19,7 @@ pub async fn add_todo(
     pool: &SqlitePool,
     chat_id: i64,
     date: NaiveDate,
-    description: String,
+    description: &str,
 ) -> Result<()> {
     sqlx::query!(
         r#"
